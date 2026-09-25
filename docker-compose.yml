@@ -1,0 +1,116 @@
+# =============================================================
+#  6 MCP servers + LangChain agent — one container per API
+#
+#   docker compose up -d --build      # start all 6 MCP servers
+#   docker compose run --rm agent     # chat with the agent
+#
+#  Each container receives ONLY the variables it needs
+#  (values come from .env via ${VAR} substitution).
+#
+#   service     port   API                     key needed?
+#   weather     8001   Open-Meteo              no
+#   jira        8002   Jira Cloud              JIRA_* vars
+#   ec2         8003   AWS EC2                 IAM role
+#   github      8004   GitHub REST             optional token
+#   currency    8005   Frankfurter (ECB)       no
+#   wikipedia   8006   Wikipedia               no
+# =============================================================
+
+x-server: &server
+  restart: unless-stopped
+  networks: [mcp-net]
+
+services:
+
+  weather:
+    <<: *server
+    build: ./mcp-servers/weather
+    image: mcp-weather:latest
+    container_name: mcp-weather
+    environment:
+      WEATHER_PORT: "8001"
+    ports: ["127.0.0.1:8001:8001"]
+
+  jira:
+    <<: *server
+    build: ./mcp-servers/jira
+    image: mcp-jira:latest
+    container_name: mcp-jira
+    environment:
+      JIRA_PORT: "8002"
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+    ports: ["127.0.0.1:8002:8002"]
+
+  ec2:
+    <<: *server
+    build: ./mcp-servers/ec2
+    image: mcp-ec2:latest
+    container_name: mcp-ec2
+    environment:
+      EC2_PORT: "8003"
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      EC2_ALLOW_WRITE: ${EC2_ALLOW_WRITE:-false}
+    ports: ["127.0.0.1:8003:8003"]
+
+  github:
+    <<: *server
+    build: ./mcp-servers/github
+    image: mcp-github:latest
+    container_name: mcp-github
+    environment:
+      GITHUB_PORT: "8004"
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    ports: ["127.0.0.1:8004:8004"]
+
+  currency:
+    <<: *server
+    build: ./mcp-servers/currency
+    image: mcp-currency:latest
+    container_name: mcp-currency
+    environment:
+      CURRENCY_PORT: "8005"
+    ports: ["127.0.0.1:8005:8005"]
+
+  wikipedia:
+    <<: *server
+    build: ./mcp-servers/wikipedia
+    image: mcp-wikipedia:latest
+    container_name: mcp-wikipedia
+    environment:
+      WIKIPEDIA_PORT: "8006"
+      WIKIPEDIA_USER_AGENT: ${WIKIPEDIA_USER_AGENT:-mcp-langchain-lab/1.0 (training project)}
+    ports: ["127.0.0.1:8006:8006"]
+
+  # Interactive agent — NOT started by `up -d`. Run: docker compose run --rm agent
+  agent:
+    build: ./agent
+    image: mcp-agent:latest
+    container_name: mcp-agent
+    profiles: ["cli"]
+    networks: [mcp-net]
+    stdin_open: true
+    tty: true
+    environment:
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-haiku-4-5-20251001}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      WEATHER_MCP_URL:   http://weather:8001/mcp
+      JIRA_MCP_URL:      http://jira:8002/mcp
+      EC2_MCP_URL:       http://ec2:8003/mcp
+      GITHUB_MCP_URL:    http://github:8004/mcp
+      CURRENCY_MCP_URL:  http://currency:8005/mcp
+      WIKIPEDIA_MCP_URL: http://wikipedia:8006/mcp
+    depends_on:
+      weather:   { condition: service_healthy }
+      jira:      { condition: service_healthy }
+      ec2:       { condition: service_healthy }
+      github:    { condition: service_healthy }
+      currency:  { condition: service_healthy }
+      wikipedia: { condition: service_healthy }
+
+networks:
+  mcp-net:
+    name: mcp-net

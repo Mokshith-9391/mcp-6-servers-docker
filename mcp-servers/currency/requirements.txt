@@ -1,0 +1,4 @@
+# currency MCP server dependencies
+mcp>=1.30.0
+httpx>=0.28.0
+python-dotenv>=1.0.0

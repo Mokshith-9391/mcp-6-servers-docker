@@ -1,0 +1,6 @@
+# Agent dependencies
+langchain>=1.4.0
+langchain-mcp-adapters>=0.3.2
+langchain-anthropic>=1.7.0
+langchain-openai>=1.6.0
+python-dotenv>=1.0.0
